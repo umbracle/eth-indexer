@@ -1,0 +1,40 @@
+syntax = "proto3";
+
+package proto;
+
+option go_package = "/sdk/proto";
+
+message Diff {
+    // table to which the difference belongs
+    string table = 1;
+
+    // whether this entry is new or its an update
+    bool creation = 2;
+
+    // primary keys of the object
+    map<string, string> keys = 3;
+
+    // new values of the object
+    map<string, string> vals = 4;
+}
+
+message Obj {
+    // values of the object
+    map<string, string> data = 1;
+}
+
+message Schema {
+    string name = 1;
+    string description = 2;
+    repeated Field fields = 3;
+}
+
+message Field {
+    string name = 1;
+    string description = 2;
+    
+    message Reference {
+        string table = 1;
+        string field = 2;
+    }
+}

@@ -1,0 +1,66 @@
+syntax = "proto3";
+
+package proto;
+
+option go_package = "/indexer/proto";
+
+message Event {
+    // @inject_tag: db:"log_index"
+    uint64 logIndex = 1;
+    
+    // @inject_tag: db:"tx_index"
+    uint64 txIndex = 2;
+    
+    // @inject_tag: db:"tx_hash"
+    string txHash = 3;
+    
+    // @inject_tag: db:"block_num"
+    uint64 blockNum = 4;
+    
+    // @inject_tag: db:"block_hash"
+    string blockHash = 5;
+
+    // @inject_tag: db:"address"
+    string address = 6;
+    
+    // @inject_tag: db:"topicid"
+    string topicID = 7;
+
+    // @inject_tag: db:"topics"
+    string topics = 8;
+
+    // @inject_tag: db:"data"
+    string data = 9;
+
+    // @inject_tag: db:"event"
+    string event = 10;
+
+    // @inject_tag: db:"removed"
+    bool removed = 11;
+}
+
+message Track {
+    // @inject_tag: db:"from_addr"
+    string fromAddr = 1;
+      
+    // @inject_tag: db:"to_addr"
+    string toAddr = 2;
+
+    // @inject_tag: db:"topic"
+    string topic = 3;
+
+    // @inject_tag: db:"name"
+    string name = 4;
+
+    // @inject_tag: db:"lastblocknum"
+    uint64 lastBlockNum = 5;
+
+    // @inject_tag: db:"lastblockhash"
+    string lastBlockHash = 6;
+
+    // @inject_tag: db:"startblock"
+    uint64 startBlock = 7;
+
+    // @inject_tag: db:"synced"
+    bool synced = 8;
+}
