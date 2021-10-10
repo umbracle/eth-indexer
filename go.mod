@@ -17,6 +17,8 @@ require (
 	github.com/ory/dockertest/v3 v3.6.3
 	github.com/stretchr/testify v1.6.1
 	github.com/umbracle/go-web3 v0.0.0-20210512172711-7638da261aaf
+	go.starlark.net v0.0.0-20210901212718-87f333178d59
+	golang.org/x/sys v0.0.0-20211007075335-d3039528d8ac // indirect
 	google.golang.org/grpc v1.37.0
 	google.golang.org/protobuf v1.25.0
 )

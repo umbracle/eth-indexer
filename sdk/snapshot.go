@@ -3,19 +3,19 @@ package sdk
 import (
 	"encoding/hex"
 	"fmt"
-	"runtime"
 
-	protosdk "github.com/umbracle/eth-indexer/sdk/proto"
+	"github.com/umbracle/eth-indexer/schema"
+	"github.com/umbracle/eth-indexer/state"
 )
 
 type objErr interface {
 	finish(*ErrorEvent)
 }
 
-type Obj2 struct {
-	schema *Table
+type Obj struct {
+	schema *schema.Table
 	// TODO: provider interface to call finish
-	objErr  objErr
+	// objErr  objErr
 	created bool
 	id      []byte
 	table   string
@@ -24,41 +24,45 @@ type Obj2 struct {
 	changes map[string]string
 }
 
-func (o *Obj2) IsNew() bool {
+func (o *Obj) Table() string {
+	return o.table
+}
+
+func (o *Obj) Keys() map[string]string {
+	return o.key
+}
+
+func (o *Obj) IsNew() bool {
 	return o.created
 }
 
-func (o *Obj2) getField(name string) *Field {
+func (o *Obj) getField(name string) (*schema.Field, bool) {
 	for _, f := range o.schema.Fields {
 		if f.Name == name {
-			return f
+			return f, true
 		}
 	}
-	o.objErr.finish(&ErrorEvent{
-		Type: ErrorEventFieldNotFound,
-		Err:  fmt.Errorf("%s %s", o.table, name),
-	})
-	return nil
+	return nil, false
 }
 
-func (o *Obj2) isChanged() bool {
+func (o *Obj) isChanged() bool {
 	return len(o.changes) != 0
 }
 
-func (o *Obj2) hasChanged(key string) (string, bool) {
+func (o *Obj) hasChanged(key string) (string, bool) {
 	val, ok := o.changes[key]
 	return val, ok
 }
 
-func (o *Obj2) Set(key string, val interface{}) {
+func (o *Obj) Set(key string, val interface{}) error {
 	// convert val to a string representation
-	field := o.getField(key)
+	field, ok := o.getField(key)
+	if !ok {
+		return fmt.Errorf("field not found '%s'", key)
+	}
 	valStr, err := field.Encode(val)
 	if err != nil {
-		o.objErr.finish(&ErrorEvent{
-			Type: ErrorEventSetEncode,
-			Err:  fmt.Errorf("failed to encode schema %s %s with %s: %v", o.table, key, val, err),
-		})
+		return fmt.Errorf("failed to encode schema %s %s with %s: %v", o.table, key, val, err)
 	}
 
 	if raw, ok := o.vals[key]; ok {
@@ -68,16 +72,15 @@ func (o *Obj2) Set(key string, val interface{}) {
 	} else {
 		o.changes[key] = valStr
 	}
+	return nil
 }
 
-func (o *Obj2) Get(key string) interface{} {
-	v, _ := o.GetOk(key)
-	return v
-}
-
-func (o *Obj2) GetOk(key string) (interface{}, bool) {
+func (o *Obj) Get(key string) (interface{}, error) {
 	// make sure first the value exists
-	field := o.getField(key)
+	field, ok := o.getField(key)
+	if !ok {
+		return nil, fmt.Errorf("field '%s' not found", key)
+	}
 
 	// try in changes first
 	valStr, ok := o.changes[key]
@@ -85,92 +88,101 @@ func (o *Obj2) GetOk(key string) (interface{}, bool) {
 		// use the state value
 		valStr, ok = o.vals[key]
 		if !ok {
-			return nil, false
+			panic("bad")
 		}
 	}
 	// convert val to his type
 	val, err := field.Decode(valStr)
 	if err != nil {
-		o.objErr.finish(&ErrorEvent{
-			Type: ErrorEventGetDecode,
-			Err:  fmt.Errorf("failed to decode %s with %s: %v", key, val, err),
-		})
+		return nil, fmt.Errorf("failed to decode")
+		/*
+			o.objErr.finish(&ErrorEvent{
+				Type: ErrorEventGetDecode,
+				Err:  fmt.Errorf("failed to decode %s with %s: %v", key, val, err),
+			})
+		*/
 	}
-	return val, true
+	return val, nil
 }
 
-func (o *Obj2) expect(key string, fieldType FieldType) {
-	field := o.getField(key)
+func (o *Obj) expect(key string, fieldType schema.FieldType) error {
+	field, ok := o.getField(key)
+	if !ok {
+		return fmt.Errorf("field '%s' not found", key)
+	}
 	if field.Type != fieldType {
-		o.objErr.finish(&ErrorEvent{
-			Type: ErrorEventFieldBadType,
-			Err:  fmt.Errorf("field %s expected %d but found %d", key, fieldType, field.Type),
-		})
+		return fmt.Errorf("field %s expected %d but found %d", key, fieldType, field.Type)
 	}
+	return nil
 }
 
-func (o *Obj2) Incr(key string) {
-	o.Add(key, uint64(1))
+func (o *Obj) Incr(key string) error {
+	return o.Add(key, uint64(1))
 }
 
-func (o *Obj2) Sub(key string, v interface{}) {
+func (o *Obj) Sub(key string, v interface{}) error {
 	var val interface{}
 
+	var err error
 	switch obj := v.(type) {
-	case *Float:
-		o.expect(key, TypeDecimal)
-		val = o.Get(key).(*Float).Sub(obj)
+	case *schema.Float:
+		if err := o.expect(key, schema.TypeDecimal); err != nil {
+			return err
+		}
+		val, err = o.Get(key)
+		if err != nil {
+			return err
+		}
+		val.(*schema.Float).Sub(obj)
 
 	case uint64:
-		o.expect(key, TypeUint)
-		val = o.Get(key).(uint64) - obj
+		if err := o.expect(key, schema.TypeUint); err != nil {
+			return err
+		}
+		val, err = o.Get(key)
+		if err != nil {
+			return err
+		}
+		val = val.(uint64) - obj
 	}
 	o.Set(key, val)
+	return nil
 }
 
-func (o *Obj2) Add(key string, v interface{}) {
+func (o *Obj) Add(key string, v interface{}) error {
 	var val interface{}
 
+	var err error
 	switch obj := v.(type) {
-	case *Float:
-		o.expect(key, TypeDecimal)
-		val = o.Get(key).(*Float).Add(obj)
+	case *schema.Float:
+		if err := o.expect(key, schema.TypeDecimal); err != nil {
+			return err
+		}
+		val, err = o.Get(key)
+		if err != nil {
+			return err
+		}
+		val.(*schema.Float).Add(obj)
 
 	case uint64:
-		o.expect(key, TypeUint)
-		val = o.Get(key).(uint64) + obj
+		if err := o.expect(key, schema.TypeUint); err != nil {
+			return err
+		}
+		val, err = o.Get(key)
+		if err != nil {
+			return err
+		}
+		val = val.(uint64) + obj
 
 	default:
 		panic("Not expected")
 	}
 	o.Set(key, val)
+	return nil
 }
 
-/*
-func (o *Obj2) getNum(key string) *big.Int {
-	current := new(big.Int)
-	past, ok := o.getOk(key)
-	if ok {
-		current.SetString(past, 10)
-	}
-	return current
-}
-
-func (o *Obj2) div(key string, v *big.Int) {
-	val := o.getNum(key)
-	val.Div(val, v)
-	o.set(key, val.String())
-}
-
-func (o *Obj2) mul(key string, v *big.Int) {
-	val := o.getNum(key)
-	val.Mul(val, v)
-	o.set(key, val.String())
-}
-*/
-
-func (o *Obj2) Copy() *Obj2 {
-	oo := new(Obj2)
+func (o *Obj) Copy() *Obj {
+	oo := new(Obj)
 	*oo = *o
 
 	oo.key = map[string]string{}
@@ -185,14 +197,14 @@ func (o *Obj2) Copy() *Obj2 {
 	return oo
 }
 
-func (s *Snapshot) save() []*protosdk.Diff {
-	diffs := []*protosdk.Diff{}
+func (s *Snapshot) save() []*schema.Diff {
+	diffs := []*schema.Diff{}
 
 	for _, obj := range s.trackedObjs {
 		if obj.isChanged() {
-			obj2 := obj.Copy()
+			obj := obj.Copy()
 
-			diff := &protosdk.Diff{
+			diff := &schema.Diff{
 				Table:    obj.table,
 				Keys:     obj.key,
 				Creation: obj.created,
@@ -201,14 +213,14 @@ func (s *Snapshot) save() []*protosdk.Diff {
 			diffs = append(diffs, diff)
 
 			for k, v := range obj.changes {
-				obj2.vals[k] = v
+				obj.vals[k] = v
 			}
 
 			// reset the object
-			obj2.changes = map[string]string{}
-			obj2.created = false
+			obj.changes = map[string]string{}
+			obj.created = false
 
-			s.inmemStore.add(string(obj2.id), obj2)
+			s.inmemStore.add(string(obj.id), obj)
 			obj.changes = map[string]string{} // reset changes in parent
 		}
 	}
@@ -223,8 +235,8 @@ func buildIndex(table string, keys []string) []byte {
 	return []byte(res)
 }
 
-func (s *Snapshot) create(table string, schema *Table, id string, keys map[string]string) *Obj2 {
-	obj := &Obj2{
+func (s *Snapshot) create(table string, schema *schema.Table, id string, keys map[string]string) *Obj {
+	obj := &Obj{
 		schema:  schema,
 		created: true,
 		id:      []byte(id),
@@ -237,7 +249,7 @@ func (s *Snapshot) create(table string, schema *Table, id string, keys map[strin
 	return obj
 }
 
-func (s *Snapshot) getOk(table string, id string) (*Obj2, bool) {
+func (s *Snapshot) getOk(table string, id string) (*Obj, bool) {
 	// check tracked objects
 	if obj, ok := s.trackedObjs[id]; ok {
 		return obj, true
@@ -252,47 +264,70 @@ func (s *Snapshot) getOk(table string, id string) (*Obj2, bool) {
 	return nil, false
 }
 
+// StateResolver is an interface used to resolve state information
+type StateResolver interface {
+	GetObj(table string, keys map[string]string) (*state.Obj, error)
+}
+
+func NewMockStateResolver() *MockStateResolver {
+	return &MockStateResolver{}
+}
+
+type MockStateResolver struct {
+}
+
+func (m *MockStateResolver) GetObj(table string, keys map[string]string) (*state.Obj, error) {
+	return nil, nil
+}
+
 // Snapshot is a wrapper around the snapshot that does safe checks on the types
 type Snapshot struct {
-	provider    *Provider
-	err         *ErrorEvent
-	block       uint64
-	schemas     map[string]*Table
+	// provider    *Provider
+	// err         *ErrorEvent
+	// block       uint64
+	schemas     map[string]*schema.Table
 	inmemStore  *inmemStore
-	trackedObjs map[string]*Obj2
+	trackedObjs map[string]*Obj
+	// errCh       chan struct{}
+	resolver StateResolver
 }
 
 func (s *Snapshot) reset() {
-	s.trackedObjs = map[string]*Obj2{}
+	s.trackedObjs = map[string]*Obj{}
 }
 
-func newSnapshot() *Snapshot {
+func (s *Snapshot) AddSchema(name string, t *schema.Table) {
+	if s.schemas == nil {
+		s.schemas = map[string]*schema.Table{}
+	}
+	s.schemas[name] = t
+}
+
+func NewSnapshot(resolver StateResolver) *Snapshot {
 	return &Snapshot{
 		inmemStore:  newInmemStore(),
-		trackedObjs: map[string]*Obj2{},
+		trackedObjs: map[string]*Obj{},
+		// errCh:       make(chan struct{}),
+		schemas:  map[string]*schema.Table{},
+		resolver: resolver,
 	}
 }
 
-func (s *Snapshot) decodeKeyAccess(tableName string, keyRaw ...interface{}) (map[string]string, string) {
+func (s *Snapshot) decodeKeyAccess(tableName string, keyRaw ...interface{}) (map[string]string, string, error) {
 	// validation
 	table, ok := s.schemas[tableName]
 	if !ok {
-		s.finish(&ErrorEvent{
-			Type: ErrorEventSchemaNotFound,
-			Err:  fmt.Errorf(tableName),
-		})
+		return nil, "", fmt.Errorf("table name not found %s", tableName)
 	}
 	// get ids in order
-	idFields := []*Field{}
+	idFields := []*schema.Field{}
 	for _, field := range table.Fields {
 		if field.ID {
 			idFields = append(idFields, field)
 		}
 	}
 	if len(idFields) != len(keyRaw) {
-		s.finish(&ErrorEvent{
-			Type: ErrorEventIncorrectIdFields,
-		})
+		return nil, "", fmt.Errorf("bad size")
 	}
 
 	vals := []string{}
@@ -300,28 +335,31 @@ func (s *Snapshot) decodeKeyAccess(tableName string, keyRaw ...interface{}) (map
 	for indx, field := range idFields {
 		valStr, err := field.Encode(keyRaw[indx])
 		if err != nil {
-			s.finish(&ErrorEvent{
-				Type: ErrorEventGeneric,
-				Err:  err,
-			})
+			return nil, "", err
 		}
 		vals = append(vals, valStr)
 		keysMap[field.Name] = valStr
 	}
 
 	id := hex.EncodeToString(buildIndex(tableName, vals))
-	return keysMap, id
+	return keysMap, id, nil
 }
 
-func (s *Snapshot) GetOk(tableName string, keyRaw ...interface{}) (*Obj2, bool) {
-	_, idStr := s.decodeKeyAccess(tableName, keyRaw...)
-
+/*
+func (s *Snapshot) GetOk(tableName string, keyRaw ...interface{}) (*Obj, bool, error) {
+	_, idStr, err := s.decodeKeyAccess(tableName, keyRaw...)
+	if err != nil {
+		return nil, false, err
+	}
 	return s.getOk(tableName, idStr)
 }
+*/
 
+/*
 func (s *Snapshot) hasError() bool {
 	return s.err != nil
 }
+*/
 
 type ErrorEvent struct {
 	Type        string
@@ -341,30 +379,48 @@ const (
 	ErrorEventGeneric           = "ErrorEventGeneric"
 )
 
+/*
+func (s *Snapshot) ErrCh() <-chan struct{} {
+	return s.errCh
+}
+*/
+
+/*
 func (s *Snapshot) finish(evnt *ErrorEvent) {
 	s.err = evnt
-	runtime.Goexit()
-}
+	close(s.errCh)
 
-func (s *Snapshot) Get(tableName string, keyRaw ...interface{}) *Obj2 {
-	keysMap, idStr := s.decodeKeyAccess(tableName, keyRaw...)
+	fmt.Println(evnt.Description)
+	fmt.Println(evnt.Err)
+
+	panic("x")
+	// runtime.Goexit()
+}
+*/
+
+func (s *Snapshot) Get(tableName string, keyRaw ...interface{}) (*Obj, error) {
+	keysMap, idStr, err := s.decodeKeyAccess(tableName, keyRaw...)
+	if err != nil {
+		return nil, err
+	}
 
 	obj, ok := s.getOk(tableName, idStr)
 	if ok {
-		return obj
+		return obj, nil
 	}
 
-	var dataObj *Obj
-	if s.provider.resolver != nil {
-		// not found, try to search it still on the resolver (if any)
-		raw, err := s.provider.resolver.GetObj2(tableName, keysMap)
-		if err != nil {
+	var dataObj *state.Obj
+
+	// not found, try to search it on the resolver (if any)
+	dataObj, err = s.resolver.GetObj(tableName, keysMap)
+	if err != nil {
+		/*
 			s.finish(&ErrorEvent{
 				Type: ErrorEventRecoverObject,
 				Err:  err,
 			})
-		}
-		dataObj = raw
+		*/
+		return nil, fmt.Errorf("bad 1")
 	}
 
 	table := s.schemas[tableName]
@@ -374,7 +430,7 @@ func (s *Snapshot) Get(tableName string, keyRaw ...interface{}) *Obj2 {
 		obj = s.create(tableName, table, idStr, keysMap)
 	} else {
 		// derive the object
-		obj = &Obj2{
+		obj = &Obj{
 			schema:  table,
 			id:      []byte(idStr),
 			table:   tableName,
@@ -393,9 +449,6 @@ func (s *Snapshot) Get(tableName string, keyRaw ...interface{}) *Obj2 {
 		s.inmemStore.add(idStr, obj.Copy())
 	}
 
-	// pass a reference so that the object can call errors
-	obj.objErr = s
-
 	// initialize the default values
 	for _, field := range table.Fields {
 		if field.Default != nil {
@@ -403,26 +456,5 @@ func (s *Snapshot) Get(tableName string, keyRaw ...interface{}) *Obj2 {
 			obj.Set(field.Name, field.Default)
 		}
 	}
-
-	idFields := table.getIDS()
-
-	if len(idFields) == 1 {
-		// initialize only if there is one id since this is meant to be used
-		// only for external contracts that need to call information
-		idField := idFields[0]
-
-		keyID, err := idField.Encode(keyRaw[0])
-		if err != nil {
-			panic(err)
-		}
-		// call init function
-		if err := s.provider.initSchema(tableName, keyID, obj); err != nil {
-			s.finish(&ErrorEvent{
-				Type: ErrorEventContractInit,
-				Err:  err,
-			})
-		}
-	}
-
-	return obj
+	return obj, nil
 }

@@ -4,7 +4,7 @@ import lru "github.com/hashicorp/golang-lru"
 
 type inmemStore struct {
 	cache *lru.Cache
-	data  map[string]*Obj2
+	data  map[string]*Obj
 }
 
 func newInmemStore() *inmemStore {
@@ -14,15 +14,15 @@ func newInmemStore() *inmemStore {
 	}
 }
 
-func (i *inmemStore) get(k string) (*Obj2, bool) {
+func (i *inmemStore) get(k string) (*Obj, bool) {
 	v, ok := i.cache.Get(k)
 	if !ok {
 		return nil, false
 	}
-	return v.(*Obj2), true
+	return v.(*Obj), true
 }
 
-func (i *inmemStore) add(k string, val *Obj2) {
+func (i *inmemStore) add(k string, val *Obj) {
 	// it is assumed that this is locked
 	i.cache.Add(k, val)
 }

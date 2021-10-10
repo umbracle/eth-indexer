@@ -7,20 +7,21 @@ import (
 	"strings"
 
 	"github.com/graphql-go/graphql"
-	"github.com/umbracle/eth-indexer/sdk"
+	"github.com/umbracle/eth-indexer/schema"
+	"github.com/umbracle/eth-indexer/state"
 	"github.com/umbracle/go-web3"
 )
 
 type Server struct {
-	resolver sdk.StateResolver
+	resolver state.State
 }
 
 type tuple struct {
 	obj   *graphql.Object
-	table *sdk.Table
+	table *schema.Table
 }
 
-func (s *Server) Register(sch *sdk.Schema) {
+func (s *Server) Register(sch *schema.Schema) {
 	var objs []*tuple
 	for _, table := range sch.Tables {
 		graphqlFields := graphql.Fields{}
@@ -28,7 +29,7 @@ func (s *Server) Register(sch *sdk.Schema) {
 			graphqlFields[f.Name] = &graphql.Field{
 				Type: graphql.NewNonNull(graphql.String),
 				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
-					obj := p.Source.(*sdk.Obj)
+					obj := p.Source.(*state.Obj)
 					return obj.Data[p.Info.FieldName], nil
 				},
 			}
@@ -58,7 +59,7 @@ func (s *Server) Register(sch *sdk.Schema) {
 				addr := p.Args["address"].(*web3.Address)
 				tableName := strings.TrimRight(p.Info.FieldName, "s")
 
-				obj, err := s.resolver.GetObj2(tableName, map[string]string{"address": addr.String()})
+				obj, err := s.resolver.GetObj(tableName, map[string]string{"address": addr.String()})
 				if err != nil {
 					return nil, err
 				}
@@ -92,14 +93,14 @@ func (s *Server) Register(sch *sdk.Schema) {
 			Resolve: func(p graphql.ResolveParams) (interface{}, error) {
 				tableName := strings.TrimRight(p.Info.FieldName, "s")
 
-				query := &sdk.Query{
+				query := &state.Query{
 					Table:   tableName,
 					First:   uint64(p.Args["first"].(int)),
 					Skip:    uint64(p.Args["skip"].(int)),
 					OrderBy: p.Args["orderBy"].(string),
 					Order:   p.Args["orderDirection"].(string),
 				}
-				objs, err := s.resolver.GetObjs2(query)
+				objs, err := s.resolver.GetObjs(query)
 				if err != nil {
 					return nil, err
 				}
