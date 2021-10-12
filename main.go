@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"reflect"
 
+	"github.com/umbracle/eth-indexer/schema"
 	"github.com/umbracle/eth-indexer/sdk"
 	"go.starlark.net/starlark"
 	"go.starlark.net/starlarkstruct"
@@ -25,7 +26,7 @@ func encode(x starlark.Value) (interface{}, error) {
 }
 
 type objWrapper struct {
-	obj *sdk.Obj2
+	obj *sdk.Obj
 }
 
 func (o *objWrapper) Module() *starlarkstruct.Module {
@@ -111,7 +112,7 @@ func (c *Indexer) Module() *starlarkstruct.Module {
 }
 
 type Schema struct {
-	tables []*sdk.Table
+	tables []*schema.Table
 }
 
 func (s *Schema) add(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
@@ -129,9 +130,9 @@ func (s *Schema) add(thread *starlark.Thread, b *starlark.Builtin, args starlark
 	iter := fields.Iterate()
 	defer iter.Done()
 
-	table := &sdk.Table{
+	table := &schema.Table{
 		Name:   name,
-		Fields: []*sdk.Field{},
+		Fields: []*schema.Field{},
 	}
 	var elem starlark.Value
 	for i := 0; iter.Next(&elem); i++ {
@@ -160,9 +161,9 @@ func (s *Schema) add(thread *starlark.Thread, b *starlark.Builtin, args starlark
 		if err != nil {
 			return nil, err
 		}
-		table.Fields = append(table.Fields, &sdk.Field{
+		table.Fields = append(table.Fields, &schema.Field{
 			Name: val.(string),
-			Type: sdk.TypeString,
+			Type: schema.TypeString,
 		})
 	}
 	s.tables = append(s.tables, table)
@@ -184,17 +185,17 @@ func (s *Schema) Module() *starlarkstruct.Module {
 func main() {
 
 	snap := sdk.NewSnapshot(sdk.NewMockStateResolver())
-	snap.AddSchema("token", &sdk.Table{
+	snap.AddSchema("token", &schema.Table{
 		Name: "token",
-		Fields: []*sdk.Field{
+		Fields: []*schema.Field{
 			{
 				Name: "id",
 				ID:   true,
-				Type: sdk.TypeAddress,
+				Type: schema.TypeAddress,
 			},
 			{
 				Name: "val",
-				Type: sdk.TypeString,
+				Type: schema.TypeString,
 			},
 		},
 	})
