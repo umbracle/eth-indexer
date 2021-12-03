@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package proto;
+
+option go_package = "/indexer/proto";
+import "google/protobuf/empty.proto";
+
+service IndexerService {
+    rpc Apply(Component) returns (google.protobuf.Empty);
+}
+
+message Component {
+
+}

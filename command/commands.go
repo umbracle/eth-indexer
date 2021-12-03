@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/mitchellh/cli"
+	"github.com/umbracle/eth-indexer/indexer/proto"
 	"google.golang.org/grpc"
 )
 
@@ -16,7 +17,7 @@ func Commands() map[string]cli.CommandFactory {
 		Writer:      os.Stdout,
 		ErrorWriter: os.Stderr,
 	}
-	_ = Meta{
+	meta := &Meta{
 		UI: ui,
 	}
 
@@ -24,6 +25,11 @@ func Commands() map[string]cli.CommandFactory {
 		"server": func() (cli.Command, error) {
 			return &ServerCommand{
 				UI: ui,
+			}, nil
+		},
+		"apply": func() (cli.Command, error) {
+			return &ApplyCommand{
+				meta,
 			}, nil
 		},
 	}
@@ -49,4 +55,12 @@ func (m *Meta) Conn() (*grpc.ClientConn, error) {
 		return nil, fmt.Errorf("failed to connect to server: %v", err)
 	}
 	return conn, nil
+}
+
+func (m *Meta) IndexerClient() (proto.IndexerServiceClient, error) {
+	conn, err := m.Conn()
+	if err != nil {
+		return nil, err
+	}
+	return proto.NewIndexerServiceClient(conn), nil
 }

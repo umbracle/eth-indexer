@@ -2,9 +2,12 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"reflect"
 
+	"github.com/mitchellh/cli"
+	"github.com/umbracle/eth-indexer/command"
 	"github.com/umbracle/eth-indexer/schema"
 	"github.com/umbracle/eth-indexer/sdk"
 	"go.starlark.net/starlark"
@@ -58,6 +61,8 @@ func (o *objWrapper) objSet(thread *starlark.Thread, _ *starlark.Builtin, args s
 
 type Indexer struct {
 	snap *sdk.Snapshot
+
+	indexes []*index
 }
 
 func (c *Indexer) get(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
@@ -81,6 +86,60 @@ func (c *Indexer) get(thread *starlark.Thread, b *starlark.Builtin, args starlar
 	return wrapper.Module(), nil
 }
 
+type dict struct {
+	raw *starlark.Dict
+}
+
+func (d *dict) Get(key string, typ string) starlark.Value {
+	v, ok, err := d.raw.Get(starlark.String(key))
+	if err != nil {
+		panic(err)
+	}
+	if !ok {
+		panic("not found")
+	}
+	if v.Type() != typ {
+		panic("bad type")
+	}
+	return v
+}
+
+type index struct {
+	name  string
+	event string
+	impl  *starlark.Function
+}
+
+func (c *Indexer) execute(name string) {
+	var indx *index
+	for _, i := range c.indexes {
+		if i.name == name {
+			indx = i
+			break
+		}
+	}
+	if indx == nil {
+		panic("not found")
+	}
+
+	// call it!!
+	thread := &starlark.Thread{
+		Name: "my thread",
+		Load: func(thread *starlark.Thread, module string) (starlark.StringDict, error) {
+			if module == "indexer.star" {
+				return starlark.StringDict{"indexer": c.Module()}, nil
+			}
+			filename := filepath.Join(filepath.Dir(thread.CallFrame(0).Pos.Filename()), module)
+			return starlark.ExecFile(thread, filename, nil, nil)
+		},
+	}
+
+	_, err := starlark.Call(thread, indx.impl, starlark.Tuple{starlark.String("")}, nil)
+	if err != nil {
+		panic(err)
+	}
+}
+
 func (c *Indexer) index(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	fmt.Println("xxxx")
 
@@ -89,13 +148,23 @@ func (c *Indexer) index(thread *starlark.Thread, b *starlark.Builtin, args starl
 		return nil, err
 	}
 
-	fmt.Println("-- table --")
-	fmt.Println(reflect.TypeOf(table))
+	dd := &dict{
+		raw: table.(*starlark.Dict),
+	}
 
-	return starlark.False, nil
-}
+	evnt := dd.Get("event", "string").(starlark.String).String()
+	impl := dd.Get("impl", "function").(*starlark.Function)
 
-func (c *Indexer) snapshot(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	if c.indexes == nil {
+		c.indexes = []*index{}
+	}
+
+	name := fmt.Sprintf("index_%d", len(c.indexes))
+	c.indexes = append(c.indexes, &index{
+		name:  name,
+		event: evnt,
+		impl:  impl,
+	})
 	return starlark.False, nil
 }
 
@@ -103,9 +172,8 @@ func (c *Indexer) Module() *starlarkstruct.Module {
 	var Module = &starlarkstruct.Module{
 		Name: "indexer",
 		Members: starlark.StringDict{
-			"get":      starlark.NewBuiltin("indexer.get", c.get),
-			"index":    starlark.NewBuiltin("indexer.index", c.index),
-			"snapshot": starlark.NewBuiltin("indexer.snapshot", c.snapshot),
+			"get":   starlark.NewBuiltin("indexer.get", c.get),
+			"index": starlark.NewBuiltin("indexer.index", c.index),
 		},
 	}
 	return Module
@@ -183,6 +251,8 @@ func (s *Schema) Module() *starlarkstruct.Module {
 }
 
 func main() {
+	//os.Exit(Run(os.Args[1:]))
+	//return
 
 	snap := sdk.NewSnapshot(sdk.NewMockStateResolver())
 	snap.AddSchema("token", &schema.Table{
@@ -225,6 +295,10 @@ func main() {
 		panic(err)
 	}
 
+	fmt.Println(ctxt.indexes[0].name)
+
+	ctxt.execute("index_0")
+
 	fmt.Println("-- globals --")
 	fmt.Println(sch.tables)
 	fmt.Println(globals)
@@ -243,7 +317,6 @@ func main() {
 	// os.Exit(Run(os.Args[1:]))
 }
 
-/*
 // Run starts the cli
 func Run(args []string) int {
 	commands := command.Commands()
@@ -262,4 +335,3 @@ func Run(args []string) int {
 
 	return exitCode
 }
-*/

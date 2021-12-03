@@ -16,9 +16,6 @@ github.com/Nvveen/Gotty
 github.com/armon/go-radix
 # github.com/bgentry/speakeasy v0.1.0
 github.com/bgentry/speakeasy
-# github.com/boltdb/bolt v1.3.1
-## explicit
-github.com/boltdb/bolt
 # github.com/cenkalti/backoff/v3 v3.0.0
 github.com/cenkalti/backoff/v3
 # github.com/containerd/continuity v0.0.0-20191214063359-1097c8bae83b
@@ -37,6 +34,7 @@ github.com/golang/protobuf/proto
 github.com/golang/protobuf/ptypes
 github.com/golang/protobuf/ptypes/any
 github.com/golang/protobuf/ptypes/duration
+github.com/golang/protobuf/ptypes/empty
 github.com/golang/protobuf/ptypes/timestamp
 # github.com/google/gops v0.3.18
 ## explicit
@@ -103,7 +101,6 @@ github.com/mitchellh/cli
 # github.com/mitchellh/copystructure v1.0.0
 github.com/mitchellh/copystructure
 # github.com/mitchellh/mapstructure v1.1.2
-## explicit
 github.com/mitchellh/mapstructure
 # github.com/mitchellh/reflectwalk v1.0.0
 github.com/mitchellh/reflectwalk
@@ -163,12 +160,9 @@ github.com/umbracle/fastrlp
 github.com/umbracle/go-web3
 github.com/umbracle/go-web3/abi
 github.com/umbracle/go-web3/contract
-github.com/umbracle/go-web3/etherscan
 github.com/umbracle/go-web3/jsonrpc
 github.com/umbracle/go-web3/jsonrpc/codec
 github.com/umbracle/go-web3/jsonrpc/transport
-github.com/umbracle/go-web3/tracker
-github.com/umbracle/go-web3/tracker/store
 # github.com/valyala/bytebufferpool v1.0.0
 github.com/valyala/bytebufferpool
 # github.com/valyala/fasthttp v1.4.0
@@ -287,6 +281,7 @@ google.golang.org/protobuf/runtime/protoiface
 google.golang.org/protobuf/runtime/protoimpl
 google.golang.org/protobuf/types/known/anypb
 google.golang.org/protobuf/types/known/durationpb
+google.golang.org/protobuf/types/known/emptypb
 google.golang.org/protobuf/types/known/timestamppb
 # gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c
 gopkg.in/yaml.v3

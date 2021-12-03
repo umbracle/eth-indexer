@@ -7,15 +7,12 @@ schema.add("token", [
 ])
 
 def impl(evnt):
+    print(evnt)
+    
     token = indexer.get("token", "id1")
     token.set("val", "1")
 
 indexer.index({
     "event": "",
     "impl": impl
-})
-
-indexer.snapshot("masks_names", {
-    "table": "mask",
-    "index": ["names"]
 })

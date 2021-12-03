@@ -1,9 +1,7 @@
 SHELL := /bin/bash
 
 protoc:
-	protoc --go_out=. --go-grpc_out=. ./sdk/proto/*.proto
 	protoc --go_out=. --go-grpc_out=. ./indexer/proto/*.proto
-	protoc-go-inject-tag -input=./indexer/proto/structs.pb.go
 
 bindata:
 	go-bindata -pkg indexer -o ./indexer/state_migrations.go ./indexer/migrations
